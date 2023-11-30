@@ -517,7 +517,7 @@ STATIC VOID CalculateFATData(_nddt * pddt, ULONG NumSectors, UBYTE FileSystem)
       maxcl = FAT16MAX;
     }
 
-    DebugPrintf(("%d sectors for FAT+data, starting with %d sectors/cluster\n", fatdata, defbpb->bpb_nsector));
+    DebugPrintf(("%u sectors for FAT+data, starting with %d sectors/cluster\n", fatdata, defbpb->bpb_nsector));
     do
     {
       DebugPrintf(("Trying with %d sectors/cluster:\n", defbpb->bpb_nsector));
