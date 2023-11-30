@@ -28,6 +28,8 @@
 #include "globals.h"
 #include "dyndata.h"
 
+#include <inttypes.h>
+
 #ifdef VERSION_STRINGS
 static BYTE *dskRcsId =
     "$Id: dsk.c 1702 2012-02-04 08:46:16Z perditionc $";
@@ -36,7 +38,7 @@ static BYTE *dskRcsId =
 /* #define STATIC  */
 
 STATIC int LBA_Transfer(ddt FAR * pddt, UWORD mode, VOID FAR * buffer,
-                 ULONG LBA_address, unsigned total, UWORD * transferred);
+                 uint64_t LBA_address, unsigned total, UWORD * transferred);
 
 #define NENTRY          26      /* total size of dispatch table */
 
@@ -297,7 +299,7 @@ STATIC WORD RWzero(ddt FAR * pddt, UWORD mode)
 
   return LBA_Transfer(pddt, mode,
                       DiskTransferBuffer,
-                      pddt->ddt_offset, 1, &done);
+                      (uint64_t)pddt->ddt_offset, 1, &done);
 }
 
 /*
@@ -531,7 +533,7 @@ STATIC COUNT Genblockio(ddt FAR * pddt, UWORD mode, WORD head, WORD track,
 
   /* apparently sector is ZERO, not ONE based !!! */
   return LBA_Transfer(pddt, mode, buffer,
-                      ((ULONG) track * pddt->ddt_bpb.bpb_nheads + head) *
+                      ((uint64_t) track * pddt->ddt_bpb.bpb_nheads + head) *
                       (ULONG) pddt->ddt_bpb.bpb_nsecs +
                       pddt->ddt_offset + sector, count, &transferred);
 }
@@ -544,7 +546,7 @@ STATIC COUNT GenblockioAbs(ddt FAR * pddt, UWORD mode, WORD head, WORD track,
 
   /* apparently sector is ZERO, not ONE based !!! */
   return LBA_Transfer(pddt, mode, buffer,
-                      ((ULONG) track * pddt->ddt_bpb.bpb_nheads + head) *
+                      ((uint64_t) track * pddt->ddt_bpb.bpb_nheads + head) *
                       (ULONG) pddt->ddt_bpb.bpb_nsecs +
                       sector, count, &transferred);
 }
@@ -809,7 +811,8 @@ STATIC WORD Genblkdev(rqptr rp, ddt FAR * pddt)
 
 STATIC WORD blockio(rqptr rp, ddt FAR * pddt)
 {
-  ULONG start, size;
+  uint64_t start;
+  ULONG size;
   WORD ret;
   UWORD done;
 
@@ -910,7 +913,7 @@ STATIC WORD dskerr(COUNT code)
     translate LBA sectors into CHS addressing
 */
 
-STATIC int LBA_to_CHS(ULONG LBA_address, struct CHS *chs, ddt FAR * pddt,
+STATIC int LBA_to_CHS(uint64_t LBA_address, struct CHS *chs, ddt FAR * pddt,
     const bpb ** ppbpb)
 {
   /* we need the defbpb values since those are taken from the
@@ -926,7 +929,7 @@ STATIC int LBA_to_CHS(ULONG LBA_address, struct CHS *chs, ddt FAR * pddt,
   if (LBA_address > 1023ul)
   {
 #ifdef DEBUG
-    DebugPrintf(("LBA-Transfer error : cylinder %u > 1023\n", LBA_address));
+    DebugPrintf(("LBA-Transfer error : cylinder %" PRIu64 " > 1023\n", LBA_address));
 #else
     put_string("LBA-Transfer error : cylinder > 1023\n");
 #endif
@@ -958,7 +961,7 @@ STATIC unsigned DMA_max_transfer(void FAR * buffer, unsigned count)
         ddt *pddt,                          physical characteristics of drive
         UWORD mode,                         LBA_READ/WRITE/WRITE_VERIFY/VERIFY
         VOID FAR *buffer,                   user buffer
-        ULONG LBA_address,                  absolute sector address
+        uint64_t LBA_address,               absolute sector address
         unsigned totaltodo,                 number of sectors to transfer
         UWORD *transferred                  sectors actually transferred
 
@@ -982,7 +985,7 @@ STATIC unsigned DMA_max_transfer(void FAR * buffer, unsigned count)
 */
 
 STATIC int LBA_Transfer(ddt FAR * pddt, UWORD mode, VOID FAR * buffer,
-                 ULONG LBA_address, unsigned totaltodo,
+                 uint64_t LBA_address, unsigned totaltodo,
                  UWORD * transferred)
 {
   static struct _bios_LBA_address_packet dap = {
@@ -1061,8 +1064,8 @@ STATIC int LBA_Transfer(ddt FAR * pddt, UWORD mode, VOID FAR * buffer,
 
         dap.buffer_address = transfer_address;
 
-        dap.block_address_high = 0;     /* clear high part */
-        dap.block_address = LBA_address;        /* clear high part */
+        dap.block_address_high = LBA_address >> 32u;
+        dap.block_address = LBA_address & 0xffffffff;
 
         /* Load the registers and call the interrupt. */
 

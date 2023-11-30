@@ -30,6 +30,8 @@
 #include "init-mod.h"
 #include "dyndata.h"
 
+#include <inttypes.h>
+
 #define FLOPPY_SEC_SIZE 512u  /* common sector size */
 
 BSS(UBYTE FAR *, InitDiskTransferBuffer, NULL);
@@ -228,7 +230,7 @@ struct _bios_LBA_disk_parameterS {
 struct DriveParamS {
   UBYTE driveno;                /* = 0x8x                           */
   UWORD descflags;
-  ULONG total_sectors;
+  uint64_t total_sectors;
 
   struct CHS chs;               /* for normal   INT 13 */
 };
@@ -380,7 +382,7 @@ STATIC COUNT init_getdriveparm(UBYTE drive, bpb * pbpbarray)
     cyclinder and heads are 0 to N-1 based, sector is 1 to N based
 */
 
-STATIC void init_LBA_to_CHS(struct CHS *chs, ULONG LBA_address,
+STATIC void init_LBA_to_CHS(struct CHS *chs, uint64_t LBA_address,
                      struct DriveParamS *driveparam)
 {
   unsigned hs = driveparam->chs.Sector * driveparam->chs.Head;
@@ -627,7 +629,6 @@ STATIC void DosDefinePartition(struct DriveParamS *driveParam,
   pddt->ddt_defbpb.bpb_nheads = driveParam->chs.Head;
   pddt->ddt_defbpb.bpb_nsecs = driveParam->chs.Sector;
   pddt->ddt_defbpb.bpb_hidden = pEntry->RelSect;
-
   pddt->ddt_defbpb.bpb_nsize = 0;
   pddt->ddt_defbpb.bpb_huge = pEntry->NumSect;
   if (pEntry->NumSect <= 0xffff)
@@ -738,23 +739,6 @@ STATIC int LBA_Get_Drive_Parameters(int drive, struct DriveParamS *driveParam)
     goto StandardBios;
   }
 
-  /* verify maximum settings, we can't handle more */
-
-  if (lba_bios_parameters.heads > 0xffff ||
-      lba_bios_parameters.sectors > 0xffff ||
-      lba_bios_parameters.totalSectHigh != 0)
-  {
-    _printf("Drive is too large to handle, using only 1st 8 GB\n"
-           " drive %02x heads %u sectors %u , total=0x%x-%08x\n",
-           drive,
-           (ULONG) lba_bios_parameters.heads,
-           (ULONG) lba_bios_parameters.sectors,
-           (ULONG) lba_bios_parameters.totalSect,
-           (ULONG) lba_bios_parameters.totalSectHigh);
-
-    goto StandardBios;
-  }
-
   driveParam->total_sectors = lba_bios_parameters.totalSect;
 
   /* if we arrive here, success */
@@ -799,7 +783,7 @@ StandardBios:                  /* old way to get parameters */
                drive,
                driveParam->chs.Cylinder,
                driveParam->chs.Head, driveParam->chs.Sector));
-  DebugPrintf((" total size %uMB\n", driveParam->total_sectors / 2048));
+  DebugPrintf((" total size %" PRIu64 " MB\n", driveParam->total_sectors / 2048));
 
 ErrorReturn:
 
@@ -1002,7 +986,7 @@ STATIC BOOL ScanForPrimaryPartitions(struct DriveParamS * driveParam, int scan_t
 void BIOS_drive_reset(unsigned drive);
 
 STATIC int Read1LBASector(struct DriveParamS *driveParam, unsigned drive,
-                   ULONG LBA_address, void FAR * buffer)
+                   uint64_t LBA_address, void FAR * buffer)
 {
   static struct _bios_LBA_address_packet dap = {
     16, 0, 0, 0, NULL, 0, 0
@@ -1040,8 +1024,8 @@ STATIC int Read1LBASector(struct DriveParamS *driveParam, unsigned drive,
     {
       dap.number_of_blocks = 1;
       dap.buffer_address = buffer;
-      dap.block_address_high = 0;       /* clear high part */
-      dap.block_address = LBA_address;  /* clear high part */
+      dap.block_address_high = LBA_address >> 32u;
+      dap.block_address = LBA_address & 0xffffffff;  /* clear high part */
 
       /* Load the registers and call the interrupt. */
       regs.a.x = LBA_READ;
@@ -1055,7 +1039,7 @@ STATIC int Read1LBASector(struct DriveParamS *driveParam, unsigned drive,
 
       if (chs.Cylinder > 1023)
       {
-        _printf("LBA-Transfer error : address = %u, cylinder %u > 1023\n", LBA_address, chs.Cylinder);
+        _printf("LBA-Transfer error : address = %" PRIu64 ", cylinder %u > 1023\n", LBA_address, chs.Cylinder);
         return 1;
       }
 
@@ -1081,7 +1065,7 @@ STATIC int ProcessDisk(int scanType, unsigned drive, int PartitionsToIgnore)
 {
 
   struct PartTableEntry PTable[4];
-  ULONG RelSectorOffset;
+  uint64_t RelSectorOffset;
   ULONG ExtendedPartitionOffset;
   int iPart;
 //  int strangeHardwareLoop;
@@ -1112,7 +1096,7 @@ ReadNextPartitionTable:
   if (Read1LBASector
       (&driveParam, drive, RelSectorOffset, InitDiskTransferBuffer))
   {
-    _printf("Error reading partition table drive %02Xh sector %u", drive,
+    _printf("Error reading partition table drive %02Xh sector %" PRIu64, drive,
            RelSectorOffset);
     return PartitionsToIgnore;
   }
@@ -1128,7 +1112,7 @@ ReadNextPartitionTable:
     if (++strangeHardwareLoop < 3)
       goto strange_restart;
 #endif
-    _printf("illegal partition table - drive %02x sector %u\n", drive,
+    _printf("illegal partition table - drive %02x sector %" PRIu64 "\n", drive,
            RelSectorOffset);
     return PartitionsToIgnore;
   }
