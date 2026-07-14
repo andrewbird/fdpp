@@ -40,11 +40,11 @@ UDWORD FdppThunkCall(int fn, UBYTE *sp, enum DispStat *r_stat, int *r_len)
 
 #define _SP sp
 #define _DISP_CMN(f, c) { \
-    fdlogprintf("dispatch " #f "\n"); \
+    fdlogstdprint("dispatch " #f "\n"); \
     objtrace_enter(); \
     c; \
     objtrace_leave(); \
-    fdlogprintf("dispatch " #f " done\n"); \
+    fdlogstdprint("dispatch " #f " done\n"); \
 }
 #define _DISPATCH(r, rv, rc, f, ...) _DISP_CMN(f, { \
     rv _r = fdpp_dispatch(&stat, f, ##__VA_ARGS__); \
@@ -60,7 +60,8 @@ UDWORD FdppThunkCall(int fn, UBYTE *sp, enum DispStat *r_stat, int *r_len)
         #include <thunk_calls.h>
 
         default:
-            fdprintf("unknown fn %i\n", fn);
+//            fdprintf("unknown fn %i\n", fn);
+            fdstdprint("unknown fn {}\n", fn);
             _fail();
             return 0;
     }

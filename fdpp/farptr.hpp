@@ -23,7 +23,10 @@
 #include <memory>
 #include <cstring>
 #include <unordered_set>
+#include <format>
+#include <string>
 #include "thunks_priv.h"
+#include "thunks.h"
 #include "objlock.hpp"
 
 #if !defined(__clang__) || (__clang_major__ >= 16) || defined(__ANDROID__)
@@ -34,12 +37,48 @@
 #define MAYBE_PACKED __attribute__((packed))
 #endif
 
+template<typename... Args>
+void fdpriostdprint(int prio, const std::string& format, Args... args)
+{
+    std::string s = std::vformat(format, std::make_format_args(args...));
+    const char *cs = s.c_str();
+
+    if (cs[0] == '@' && prio == FDPP_PRINT_LOG) {
+        prio |= FDPP_PRINT_LOG_NOPREFIX;
+        cs++;
+    }
+    fdprioprintf(prio, "%s", cs);
+}
+
+template<typename... Args>
+void fdlogstdprint(const std::string& format, Args... args)
+{
+    fdpriostdprint(FDPP_PRINT_LOG, format, std::forward<Args>(args)...);
+}
+
+template<typename... Args>
+void fdstdprint(const std::string& format, Args... args)
+{
+    fdpriostdprint(FDPP_PRINT_TERMINAL, format, std::forward<Args>(args)...);
+}
+
+template<typename... Args>
+void fdloudstdprint(const std::string& format, Args... args)
+{
+    fdpriostdprint(FDPP_PRINT_LOG, format, std::forward<Args>(args)...);
+    fdpriostdprint(FDPP_PRINT_TERMINAL, format, std::forward<Args>(args)...);
+#if 0
+    /* this may crash, depending on coopth state */
+    fdpriostdprint(FDPP_PRINT_SCREEN, format, std::forward<Args>(args)...);
+#endif
+}
+
 static inline far_s _MK_S(uint32_t s, uint16_t o)
 {
     if (s > 0xffff) {
         int delta = s - 0xffff;
         if (delta > 1)
-            fdloudprintf("strange segment %x\n", s);
+            fdloudstdprint("strange segment {:x}\n", s);
         o += delta << 4;
         s = 0xffff;
     }
@@ -340,6 +379,59 @@ public:
     FarPtr<T>& adjust_far() { this->do_adjust_far(); return *this; }
 };
 
+// Specialist std::formatter for FarPtr
+template<typename T>
+struct std::formatter<FarPtr<T>> {
+    enum class Mode { Default, SegOff, String };
+    Mode mode = Mode::Default;
+
+    constexpr auto parse(std::format_parse_context& ctx) {
+        auto it = ctx.begin();
+        auto end = ctx.end();
+
+        if (it != end) {
+            if (*it == 'p') {
+                mode = Mode::Default;
+                ++it;
+            } else if (*it == 'P') {
+                mode = Mode::SegOff;
+                ++it;
+            } else if (*it == 's') {
+                mode = Mode::String;
+                ++it;
+            }
+        }
+
+        if (it != end && *it != '}') {
+            throw std::format_error("Invalid format specifier for FarPtr.");
+        }
+
+        return it;
+    }
+
+    auto format(const FarPtr<T>& obj, std::format_context& ctx) const {
+        switch (mode) {
+            case Mode::SegOff:
+                // Prints standard segment and offset
+                return std::format_to(ctx.out(), "{:04x}:{:04x}", obj.seg(), obj.off());
+
+            case Mode::String: {
+                // Print the null-terminated data it points to
+                auto ptr = obj.get_ptr();
+                if (!ptr) {
+                    return std::format_to(ctx.out(), "(null)");
+                }
+                return std::format_to(ctx.out(), "{}", reinterpret_cast<const char*>(ptr));
+            }
+
+            case Mode::Default:
+            default:
+                // Prints the memory address
+                return std::format_to(ctx.out(), "{:#x}", reinterpret_cast<uintptr_t>(&obj));
+        }
+    }
+};
+
 template<typename, int, typename P, auto> class ArMemb;
 
 template<typename T>
@@ -443,7 +535,7 @@ class SymWrp : public T {
     bool check_magic() const {
         bool ok = std::strcmp(magic, magic_val) == 0;
         if (!ok)
-            fdloudprintf("magic bytes corrupted\n");
+            fdloudstdprint("magic bytes corrupted\n");
         return ok;
     }
 

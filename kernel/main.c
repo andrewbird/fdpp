@@ -86,6 +86,33 @@ VOID ASMCFUNC FreeDOSmain(void)
   UWORD FAR *BootParamVer;
   struct _bprm FAR *b;
 
+  char FAR *tptr = MK_FP(0xF000, 0xFFF5); // this BIOS date is not guaranteed to be nul terminated, but it is on qemu and now dosemu2
+
+  // include variable type for debugging
+  fdlogstdprint("Type: {}\n", typeid(tptr).name());
+
+  // default substitution (host ptr)
+  fdlogstdprint("Default: {}\n", tptr);
+
+  // with std 'p' substitution (host ptr)
+  fdlogstdprint("Address: {:p}\n", tptr);
+
+  // and again as far pointer the object holds
+  fdlogstdprint("SegOff: {:P}\n", tptr);
+
+  // and again as char pointer to a string
+  fdlogstdprint("String: {:s}\n", tptr);
+
+  // combined write with substitution of same variable twice
+  fdlogstdprint("Default: {0}, SegOff: {0:P}\n", tptr);
+
+  // try incremental writing, should be identical to previous log line
+  fdlogstdprint("Default: {}", tptr);
+  fdlogstdprint("@, SegOff: {:P}\n", tptr);
+
+  // check what happens if we accidentally include an old printf substitution
+  fdlogstdprint("Default: %p\n", tptr);
+
 #ifdef _MSC_VER
   extern FAR prn_dev;
   DosDataSeg = (__segment) & DATASTART;

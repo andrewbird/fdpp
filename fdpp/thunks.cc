@@ -114,7 +114,8 @@ void *resolve_segoff_fd(struct far_s fa)
 {
     int ret = fdpp->ping();
     if (ret == -1) {
-        fdlogprintf("access to %x:%x aborted\n", fa.seg, fa.off);
+//        fdlogprintf("access to %x:%x aborted\n", fa.seg, fa.off);
+        fdlogstdprint("access to {:x}:{:x} aborted\n", fa.seg, fa.off);
         fdpp_noret(PING_ABORT);
     }
     return resolve_segoff(fa);
@@ -146,7 +147,8 @@ static void do_relocs(UWORD old_seg, uint8_t *start_p, uint8_t *end_p,
             reloc++;
         }
     }
-    fdlogprintf("processed %i relocs\n", reloc);
+//    fdlogprintf("processed %i relocs\n", reloc);
+    fdlogstdprint("processed {} relocs\n", reloc);
     t = asm_tab;
     reloc = 0;
     for (i = 0; i < asm_tab_len; i++) {
@@ -161,7 +163,8 @@ static void do_relocs(UWORD old_seg, uint8_t *start_p, uint8_t *end_p,
             reloc++;
         }
     }
-    fdlogprintf("processed %i relocs\n", reloc);
+//    fdlogprintf("processed %i relocs\n", reloc);
+    fdlogstdprint("processed {} relocs\n", reloc);
 }
 
 int FdppCtrl(int idx, struct vm86_regs *regs)
@@ -274,11 +277,21 @@ void fdloudprintf(const char *format, ...)
 #endif
 }
 
+void fdprioprintf(int prio, const char *format, ...)
+{
+    va_list vl;
+
+    va_start(vl, format);
+    fdpp->print(prio, format, vl);
+    va_end(vl);
+}
+
 void cpu_relax(void)
 {
     int ret = fdpp->cpu_relax();
     if (ret == -1) {
-        fdlogprintf("relax aborted\n");
+//        fdlogprintf("relax aborted\n");
+        fdlogstdprint("relax aborted\n");
         fdpp_noret(PING_ABORT);
     }
 }
@@ -323,7 +336,8 @@ static void asm_call(struct vm86_regs *regs, uint16_t seg,
     case ASM_CALL_OK:
         break;
     case ASM_CALL_ABORT:
-        fdlogprintf("reboot jump, %i\n", recur_cnt);
+//        fdlogprintf("reboot jump, %i\n", recur_cnt);
+        fdlogstdprint("reboot jump, {}\n", recur_cnt);
         fdpp_noret(ASM_ABORT);
         break;
     }
@@ -334,7 +348,8 @@ static void asm_call_noret(struct vm86_regs *regs, uint16_t seg,
 {
     fdpp->asm_call_noret(regs, seg, off, sp, len);
     objtrace_mark();
-    fdlogprintf("noret jump, %i\n", recur_cnt);
+//    fdlogprintf("noret jump, %i\n", recur_cnt);
+    fdlogstdprint("noret jump, {}\n", recur_cnt);
     fdpp_noret(ASM_NORET);
 }
 
@@ -497,7 +512,8 @@ void RelocHook(UWORD old_seg, UWORD new_seg, UWORD offs, UDWORD len)
     uint8_t *start_p = (uint8_t *)so2lin(old_seg, offs);
     uint8_t *end_p = (uint8_t *)so2lin(old_seg + (len >> 4), (len & 0xf) + offs);
     uint16_t delta = new_seg - old_seg;
-    fdlogprintf("relocate %hx --> %hx:%hx, %x\n", old_seg, new_seg, offs, len);
+//    fdlogprintf("relocate %hx --> %hx:%hx, %x\n", old_seg, new_seg, offs, len);
+    fdlogstdprint("relocate {:04x} --> {:04x}:{:04x}, {:x}\n", old_seg, new_seg, offs, len);
     do_relocs(old_seg, start_p, end_p, delta);
     for (i = 0; i < num_athunks; i++) {
         uint8_t *ptr = (uint8_t *)resolve_segoff(*asm_thunks[i].ptr);
@@ -518,7 +534,8 @@ void RelocHook(UWORD old_seg, UWORD new_seg, UWORD offs, UDWORD len)
     if (fdpp->relocate_notify)
         fdpp->relocate_notify(old_seg, new_seg, offs, len);
 
-    fdlogprintf("processed %i relocs (%i missed)\n", reloc, miss);
+//    fdlogprintf("processed %i relocs (%i missed)\n", reloc, miss);
+    fdlogstdprint("processed {} relocs ({} missed)\n", reloc, miss);
 }
 
 void RelocSplitSeg(UWORD old_seg, UWORD new_seg, UWORD offs, UDWORD len)
@@ -557,7 +574,8 @@ void RelocSplitSeg(UWORD old_seg, UWORD new_seg, UWORD offs, UDWORD len)
             reloc++;
         }
     }
-    fdlogprintf("processed %i relocs (%i missed)\n", reloc, miss);
+//    fdlogprintf("processed %i relocs (%i missed)\n", reloc, miss);
+    fdlogstdprint("processed {} relocs ({} missed)\n", reloc, miss);
 }
 
 void PurgeHook(void *ptr, UDWORD len)
@@ -567,7 +585,8 @@ void PurgeHook(void *ptr, UDWORD len)
     int miss = 0;
     uint8_t *start_p = (uint8_t *)ptr;
     uint8_t *end_p = start_p + len;
-    fdlogprintf("purge %p %x\n", ptr, len);
+//    fdlogprintf("purge %p %x\n", ptr, len);
+    fdlogstdprint("purge {:p} {:x}\n", ptr, len);
     do_relocs(0, start_p, end_p, 0);
     for (i = 0; i < num_athunks; i++) {
         uint8_t *ptr = (uint8_t *)resolve_segoff(*asm_thunks[i].ptr);
@@ -582,7 +601,8 @@ void PurgeHook(void *ptr, UDWORD len)
             reloc++;
         }
     }
-    fdlogprintf("purged %i relocs (%i missed)\n", reloc, miss);
+//    fdlogprintf("purged %i relocs (%i missed)\n", reloc, miss);
+    fdlogstdprint("purged {} relocs ({} missed)\n", reloc, miss);
 }
 
 void _fd_mark_mem(far_t ptr, UWORD size, int type)

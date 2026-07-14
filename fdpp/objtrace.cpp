@@ -47,7 +47,8 @@ void objtrace_enter()
     });
     gc.list.clear();
     if (cnt)
-        fdlogprintf("gc'ed %i objects\n", cnt);
+//        fdlogprintf("gc'ed %i objects\n", cnt);
+        fdlogstdprint("gc'ed {} objects\n", cnt);
 }
 
 void objtrace_leave()
